@@ -16,38 +16,63 @@ struct rb {
 
 
 #define SRATE 48000.0
-#define FREQ_0 1000.0
-#define FREQ_1 2000.0
+#define BRATE 1200.0
+float FREQ_0 = 2200.0;
+float FREQ_1 = 1200.0;
 
 uint32_t hsv2rgb(double h, double s, double v);
 int sound_open(char *dev);
 void draw(void);
-void send(struct rb *rb);
+void send(char *buf);
 void gen_audio(void *data, Uint8 *stream, int len);
 
+struct rb *rb_new(size_t size);
+void rb_push(struct rb *rb, int16_t v);
+int rb_pop(struct rb *rb);
+int rb_used(struct rb *rb);
 
 SDL_Surface *screen;
 
+double t = 0;
 double v = 1;
 int mx = 0;
 int my = 0;
 
+struct rb *rb_data;
+struct rb *rb_audio;
+
+
 void gen_audio(void *data, uint8_t *stream, int len)
 {
-        struct rb *rb = data;
         int i;
-	static double t = 0;
 	int16_t *p = (void *)stream;
+	int b;
+
+	while(rb_used(rb_audio) < len) {
+
+		int v = 0;
+
+		if(rb_used(rb_data) > 0) {
+			char c = rb_pop(rb_data);
+			v = (((c ^ 0xff) << 1) | 0x1);
+		}
+
+		for(b=0; b<10; b++) {
+			for(i=0; i<(SRATE / BRATE); i++) {
+				int16_t y = cos(t * M_PI * 2) * 32000;
+				rb_push(rb_audio, y);
+				if(v & 1) {
+					t += FREQ_1 / SRATE; 
+				} else {
+					t += FREQ_0 / SRATE; 
+				}
+			}
+			v >>= 1;
+		}
+	}
 
         for(i=0; i<len/2; i++) {
-                if(rb->tail == rb->head) {
-			int16_t val = cos(t * FREQ_0 * M_PI * 2) * 32000;
-			*p++ = val;
-			t += 1.0 / SRATE;
-                } else {
-                        *p++ = rb->data[rb->tail];
-                        rb->tail = (rb->tail + 1) % rb->size;
-                }
+		*p++ = rb_pop(rb_audio);
         }
 }
 
@@ -55,13 +80,9 @@ void gen_audio(void *data, uint8_t *stream, int len)
 int main(int argc, char **argv)
 {
 	SDL_AudioSpec fmt; 
-	struct rb *rb;
 
-        rb = calloc(sizeof *rb, 1);
-        rb->size = 32e3;
-        rb->data = malloc(rb->size * 2);
-        rb->head = 0;
-        rb->tail = 0;
+	rb_data = rb_new(256);
+	rb_audio = rb_new(48000);
 
 	//int fd = sound_open("/dev/dsp");
 
@@ -72,7 +93,6 @@ int main(int argc, char **argv)
 	fmt.channels = 1;
 	fmt.samples = 256;
 	fmt.callback = gen_audio;
-	fmt.userdata = rb;
 
 	if ( SDL_OpenAudio(&fmt, NULL) < 0 ) {
 		fprintf(stderr, "Can't open audio: %s\n", SDL_GetError());
@@ -94,18 +114,35 @@ int main(int argc, char **argv)
 			if(ev.type == SDL_KEYDOWN) {
 
 				switch(ev.key.keysym.sym) {
-					case 27:
 					case SDLK_q:
+						FREQ_0 += 10;
+						break;
+					case SDLK_a:
+						FREQ_0 -= 10;
+						break;
+					case SDLK_w:
+						FREQ_1 += 10;
+						break;
+					case SDLK_s:
+						FREQ_1 -= 10;
+						break;
+					case 27:
 						exit(0);
 						break;
 					default:
 						break;
 				}
+
+				printf("%f %f\n", FREQ_0, FREQ_1);
+				char buf[2];
+				buf[0] = ev.key.keysym.sym;
+				buf[1] = 0;
+				send(buf);
 			}
 
 			if(ev.type == SDL_MOUSEBUTTONDOWN) {
 				if(ev.button.button == 0) {
-					send(rb);
+					send("A");
 				}
 				if(ev.button.button == 4) {
 					v += 0.05;
@@ -116,24 +153,46 @@ int main(int argc, char **argv)
 				if(v < 0) v = 0;
 				if(v > 1) v = 1;
 				draw();
-				send(rb);
+				send("A");
 			}
 
 			if(ev.type == SDL_VIDEORESIZE) {
 				screen = SDL_SetVideoMode(ev.resize.w, ev.resize.h, 32, SDL_HWSURFACE | SDL_RESIZABLE) ;
 				draw();
-				send(rb);
+				send("A");
 			}
 
 			if(ev.type == SDL_MOUSEMOTION) {
 				mx = ev.motion.x;
 				my = ev.motion.y;
-				send(rb);
+				send("A");
 			}
 		}
 	}
 
 	return 0;
+}
+
+
+struct rb *rb_new(size_t size)
+{
+	struct rb *rb;
+        rb = calloc(sizeof *rb, 1);
+        rb->size = size;
+        rb->data = malloc(size * 2);
+        rb->head = 0;
+        rb->tail = 0;
+	return rb;
+}
+
+
+int rb_used(struct rb *rb)
+{
+	if(rb->head >= rb->tail) {
+		return rb->head - rb->tail;
+	} else {
+		return rb->size + rb->head - rb->tail;
+	}
 }
 
 
@@ -144,30 +203,17 @@ void rb_push(struct rb *rb, int16_t v)
 }
 
 
-void send(struct rb *rb)
+int rb_pop(struct rb *rb)
 {
-	char buf[32];
-	char *p = buf;
-	int b, i;
-	static double t = 0;
+	int16_t v = rb->data[rb->tail];
+	rb->tail = (rb->tail + 1) % rb->size;
+	return v;
+}
 
-	snprintf(buf, sizeof buf, "A");
 
-	while(*p) {
-		int v = (((*p) << 1) | 0x100);
-
-		for(b=0; b<10; b++) {
-			double f = (v & 1) ? FREQ_0 : FREQ_1;
-			v >>= 1;
-			for(i=0; i<160; i++) {
-				int16_t v = cos(t * f * M_PI * 2) * 32000;
-				rb_push(rb, v);
-				t += 1.0 / SRATE;
-			}
-		}
-		p++;
-	}
-
+void send(char *buf)
+{
+	while(*buf) rb_push(rb_data, *buf++);
 
 //	uint32_t *p = screen->pixels;
 //	p += mx * screen->w + my;

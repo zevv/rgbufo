@@ -61,11 +61,12 @@ int uart_tx(char c)
  * Read one character from the UART [p.140]
  */
 
-uint8_t uart_rx(void)
+int uart_rx(void)
 {	
 	uint8_t d;
+	
+	if(rb_rx.head == rb_rx.tail) return -1;
 
-	while(rb_rx.head == rb_rx.tail);			/* Wait for incoming data */
 	d = rb_rx.buf[rb_rx.tail];				/* Get data from ringbuffer */
 	rb_rx.tail = (rb_rx.tail + 1) % sizeof(rb_rx.buf);	/* Update rb pointers */
 	return d;						/* Return data */

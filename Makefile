@@ -10,7 +10,7 @@ ELF	= $(NAME).elf
 FHEX	= $(NAME).hex
 EHEX	= $(NAME)-eeprom.hex
 
-CFLAGS  += -mmcu=atmega8 -Wall -Werror -O3 -g -I.
+CFLAGS  += -mmcu=atmega8 -Wall -Werror -Os -g -I.
 CFLAGS	+= -DF_CPU=16000000 
 LDFLAGS += -mmcu=atmega8 -g
 ADFLAGS += -p m8 -c avrispv2 -P usb
@@ -24,7 +24,7 @@ AD	= sudo avrdude
 all: $(ELF) $(FHEX) tx
 
 tx: tx.c
-	gcc -O3 -Wall -Werror -o $@ $< `pkg-config --cflags --libs sdl`
+	gcc -g -O3 -Wall -Werror -o $@ $< `pkg-config --cflags --libs sdl`
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

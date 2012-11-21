@@ -14,7 +14,7 @@
 
 void uart_init(uint16_t baudrate);
 int uart_tx(char c);
-uint8_t uart_rx(void);
+int uart_rx(void);
 void uart_puts(char *s);
 void uart_printnum(uint16_t n);
 
