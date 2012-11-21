@@ -34,6 +34,8 @@ int rb_used(struct rb *rb);
 SDL_Surface *screen;
 
 double t = 0;
+double h = 1;
+double s = 1;
 double v = 1;
 int mx = 0;
 int my = 0;
@@ -133,11 +135,7 @@ int main(int argc, char **argv)
 						break;
 				}
 
-				printf("%f %f\n", FREQ_0, FREQ_1);
-				char buf[2];
-				buf[0] = ev.key.keysym.sym;
-				buf[1] = 0;
-				send(buf);
+				send("");
 			}
 
 			if(ev.type == SDL_MOUSEBUTTONDOWN) {
@@ -145,13 +143,13 @@ int main(int argc, char **argv)
 					send("A");
 				}
 				if(ev.button.button == 4) {
-					v += 0.05;
+					s += 0.05;
 				}
 				if(ev.button.button == 5) {
-					v -= 0.05;
+					s -= 0.05;
 				}
-				if(v < 0) v = 0;
-				if(v > 1) v = 1;
+				if(s < 0) s = 0;
+				if(s > 1) s = 1;
 				draw();
 				send("A");
 			}
@@ -165,7 +163,7 @@ int main(int argc, char **argv)
 			if(ev.type == SDL_MOUSEMOTION) {
 				mx = ev.motion.x;
 				my = ev.motion.y;
-				send("A");
+				//send("A");
 			}
 		}
 	}
@@ -211,14 +209,23 @@ int rb_pop(struct rb *rb)
 }
 
 
-void send(char *buf)
+void send(char *_)
 {
-	while(*buf) rb_push(rb_data, *buf++);
+	uint32_t *v = screen->pixels + (my*screen->w + mx) * 4;
 
-//	uint32_t *p = screen->pixels;
-//	p += mx * screen->w + my;
-//	printf("%08x\n", *p);
+	double r = (*v >> 16) & 0xff;
+	double g = (*v >>  8) & 0xff;
+	double b = (*v >>  0) & 0xff;
 
+	r = pow(1.0218971486541166, r);
+	g = pow(1.0218971486541166, g);
+	b = pow(1.0218971486541166, b);
+
+	char buf[32];
+	snprintf(buf, sizeof buf, "r%.0f\ng%.0f\nb%.0f\n", r, g, b);
+
+	char *p = buf;
+	while(*p) rb_push(rb_data, *p++);
 
 }
 
@@ -231,8 +238,8 @@ void draw(void)
 	for(y=0; y<screen->h; y++) {
 		for(x=0; x<screen->w; x++) {
 
-			double s = (float)y / (float)screen->h;
-			double h = (float)x / (float)screen->w;
+			h = (float)x / (float)screen->w;
+			v = 1 - (float)y / (float)screen->h;
 
 			*p++ = hsv2rgb(h, s, v);
 		}

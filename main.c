@@ -45,16 +45,14 @@ void flop(void)
 
 int main(void)
 {
-	uart_init(UART_BAUD(9600));
+	uart_init(UART_BAUD(1200));
 
 	DDRC |= (1<<PC0) | (1<<PC1) | (1<<PC2);
 	DDRB |= (1<<PB0);
 
 	int i = 0;
 	char buf[32];
-	uint8_t h = 0, s = 255, v = 255;
-
-	uint8_t n = 0;
+	uint8_t r = 0, g = 0, b = 0;
 	
 	adc_init();
 	pwm_init();
@@ -66,13 +64,6 @@ int main(void)
 
 	for(;;) {
 		flop();
-
-
-		if(n-- == 0) {
-			h++;
-			n = 128;
-			led_set_hsv(h, s, v);
-		}
 
 		int c = uart_rx();
 
@@ -87,12 +78,11 @@ int main(void)
 
 			if(c == 13 || c == 10) {
 				int t = atoi(buf+1);
-				if(buf[0] == 'h') h = t;
-				if(buf[0] == 's') s = t;
-				if(buf[0] == 'v') v = t;
-				if(buf[0] == 10) h+=5;
+				if(buf[0] == 'r') r = t;
+				if(buf[0] == 'g') g = t;
+				if(buf[0] == 'b') b = t;
 
-				led_set_hsv(h, s, v);
+				led_set_rgb(r, g, b);
 
 				i = 0;
 				buf[i] = 0;
@@ -140,8 +130,8 @@ void hsv2rgb(int h, int s, int v, uint8_t *r, uint8_t *g, uint8_t *b)
 
 void led_set_rgb(uint8_t r, uint8_t g, uint8_t b)
 {
-	rgb[0].val = r/2;
-	rgb[1].val = g/2;
+	rgb[0].val = r;
+	rgb[1].val = g;
 	rgb[2].val = b;
 }
 
