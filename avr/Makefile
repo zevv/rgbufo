@@ -36,7 +36,7 @@ $(FHEX) $(EHEX): $(ELF)
 
 $(OBJS) $(ELF): Makefile
 
-install: $(FHEX) $(EHEX) tx
+install: $(FHEX) $(EHEX) 
 	$(AD) $(ADFLAGS) -y -e -V -U flash:w:$(FHEX):i -U eeprom:w:$(EHEX):i 
 
 install_fuses: $(FHEX) $(EHEX)

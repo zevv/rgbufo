@@ -161,7 +161,7 @@ ISR(TIMER0_OVF_vect)
 	uint8_t pn = (p + 1) % BS;
 	int16_t m = (buf[p] * buf[pn]) >> 8;
 	mavg = (mavg * 3 + m * 1) >> 2;
-	pwm_set(v + 127);
+	pwm_set(mavg + 127);
 	p = pn;
 
 	/* Output data to port looped back to uart RX */
