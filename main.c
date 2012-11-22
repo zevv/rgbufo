@@ -9,21 +9,23 @@
 #include "pwm.h"
 
 
-
 struct rgb {
 	uint8_t mask;
 	uint8_t set;
 	uint8_t val;
 };
 
+
+void handle_char(char c);
+void led_set_rgb(uint8_t r, uint8_t g, uint8_t b);
+void do_pwm(void);
+
+
 volatile struct rgb rgb[3] = { 
 	{ .mask = (1<<PC2) },
 	{ .mask = (1<<PC1) },
 	{ .mask = (1<<PC0) }
 };
-
-void led_set_rgb(uint8_t r, uint8_t g, uint8_t b);
-void do_pwm(void);
 
 
 int main(void)
@@ -34,10 +36,6 @@ int main(void)
 	DDRB |= (1<<PB0);
 	DDRD |= (1<<PD7) | (1<<PD2);
 
-	int i = 0;
-	char buf[32];
-	uint8_t r = 0, g = 0, b = 0;
-	
 	adc_init();
 	pwm_init();
 
@@ -53,34 +51,42 @@ int main(void)
 
 		if(c != -1) {
 			//uart_tx(c);
-
-			if(i < sizeof(buf) - 2) {
-				buf[i] = c;
-				buf[i+1] = 0;
-				i++;
-			}
-
-			if(c == 13 || c == 10) {
-				if(buf[0] == 'd') {
-					uart_tx(buf[1]);
-				}
-				if(buf[0] == 'c' && i > 7) {
-					b = strtol(buf+5, NULL, 16);
-					buf[5] = 0;
-					g = strtol(buf+3, NULL, 16);
-					buf[3] = 0;
-					r = strtol(buf+1, NULL, 16);
-
-					led_set_rgb(r, g, b);
-				}
-
-				i = 0;
-				buf[i] = 0;
-			}
+			handle_char(c);
 		}
 	}
 
 	return 0;
+}
+
+
+void handle_char(char c)
+{
+	static int bufptr = 0;
+	static char buf[32];
+
+	if(c == 13 || c == 10) {
+
+		if(buf[0] == 'd') {
+			uart_tx(buf[1]);
+		}
+
+		if(buf[0] == 'c') {
+			uint32_t c = strtol(buf+1, NULL, 16);
+			uint8_t r = (c >> 16) & 0xff;
+			uint8_t g = (c >>  8) & 0xff;
+			uint8_t b = (c >>  0) & 0xff;
+			led_set_rgb(r, g, b);
+		}
+
+		bufptr = 0;
+		buf[0] = 0;
+
+	} else if(bufptr < sizeof(buf) - 2) {
+
+		buf[bufptr] = c;
+		buf[bufptr+1] = 0;
+		bufptr++;
+	}
 }
 
 
@@ -102,14 +108,12 @@ void do_pwm(void)
 }
 
 
-
 void led_set_rgb(uint8_t r, uint8_t g, uint8_t b)
 {
 	rgb[0].set = r;
 	rgb[1].set = g;
 	rgb[2].set = b;
 }
-
 
 
 ISR(TIMER0_OVF_vect)
@@ -158,6 +162,7 @@ ISR(TIMER0_OVF_vect)
 	int16_t m = (buf[p] * buf[pn]) >> 8;
 	mavg = (mavg * 3 + m * 1) >> 2;
 	pwm_set(v + 127);
+	p = pn;
 
 	/* Output data to port looped back to uart RX */
 
@@ -167,9 +172,11 @@ ISR(TIMER0_OVF_vect)
 		PORTD &= ~(1<<PD2);
 	}
 	
-	p = pn;
-	
 	PORTD &= ~(1<<PD7);
-
 }
+
+
+/*
+ * End
+ */
 

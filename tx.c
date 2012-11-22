@@ -6,6 +6,11 @@
 #include <fcntl.h>
 #include <stdint.h>
 
+#define SRATE 48000.0
+#define BRATE 1200.0
+#define FREQ_0 2200.0
+#define FREQ_1 1200.0
+
 struct rb { 
         int16_t *data; 
         int size; 
@@ -14,13 +19,8 @@ struct rb {
 };
 
 
-#define SRATE 48000.0
-#define BRATE 1200.0
-float FREQ_0 = 2200.0;
-float FREQ_1 = 1200.0;
-
 uint32_t hsv2rgb(double h, double s, double v);
-int sound_open(char *dev);
+Uint32 on_timer(Uint32 interval, void *_);
 void draw(void);
 void update_color(void);
 void send(char *buf);
@@ -41,27 +41,11 @@ double v = 1;
 int R, G, B, dirty;
 int mx = 0;
 int my = 0;
+int run = 0;
 
 struct rb *rb_data;
 struct rb *rb_audio;
 
-
-Uint32 on_20hz_timer(Uint32 interval, void *_)
-{
-	SDL_Event ev;
-
-	if(dirty) {
-		char buf[32];
-		snprintf(buf, sizeof buf, "c%02x%02x%02x\n", R, G, B);
-		send(buf);
-		dirty = 0;
-	}
-
-	ev.user.type = SDL_USEREVENT;
-	ev.user.code = 1;
-	SDL_PushEvent(&ev);
-	return interval;
-}
 
 
 int main(int argc, char **argv)
@@ -93,7 +77,7 @@ int main(int argc, char **argv)
 	draw();
 
 	SDL_PauseAudio(0);
-	SDL_AddTimer(80, on_20hz_timer, NULL);
+	SDL_AddTimer(70, on_timer, NULL);
 
 	for(;;) {
 
@@ -116,6 +100,7 @@ int main(int argc, char **argv)
 			}
 
 			if(ev.type == SDL_MOUSEBUTTONDOWN) {
+				run = 1;
 			}
 
 			if(ev.type == SDL_VIDEORESIZE) {
@@ -125,6 +110,7 @@ int main(int argc, char **argv)
 			}
 
 			if(ev.type == SDL_MOUSEMOTION) {
+				run = 0;
 				mx = ev.motion.x;
 				my = ev.motion.y;
 				update_color();
@@ -133,6 +119,33 @@ int main(int argc, char **argv)
 	}
 
 	return 0;
+}
+
+
+Uint32 on_timer(Uint32 interval, void *_)
+{
+	SDL_Event ev;
+
+	if(run) {
+		if(mx < screen->w-1) {
+			mx ++;
+			update_color();
+		} else {
+			run = 0;
+		}
+	}
+
+	if(dirty) {
+		char buf[32];
+		snprintf(buf, sizeof buf, "c%02x%02x%02x\n", R, G, B);
+		send(buf);
+		dirty = 0;
+	}
+
+	ev.user.type = SDL_USEREVENT;
+	ev.user.code = 1;
+	SDL_PushEvent(&ev);
+	return interval;
 }
 
 
