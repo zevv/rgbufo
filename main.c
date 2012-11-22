@@ -12,6 +12,7 @@
 
 struct rgb {
 	uint8_t mask;
+	uint8_t set;
 	uint8_t val;
 };
 
@@ -31,7 +32,7 @@ int main(void)
 
 	DDRC |= (1<<PC0) | (1<<PC1) | (1<<PC2);
 	DDRB |= (1<<PB0);
-	DDRD |= (1<<PD7);
+	DDRD |= (1<<PD7) | (1<<PD2);
 
 	int i = 0;
 	char buf[32];
@@ -89,6 +90,10 @@ void do_pwm(void)
 	volatile struct rgb *r = &rgb[0];
 
 	for(c=0; c<3; c++) {
+
+		if(r->val < r->set) r->val ++;
+		if(r->val > r->set) r->val --;
+
 		if(r->val > 1) PORTC &= ~r->mask;
 		for(i=0; i<255; i++) if(i == r->val) PORTC |= r->mask;
 		PORTC |= r->mask;
@@ -100,9 +105,9 @@ void do_pwm(void)
 
 void led_set_rgb(uint8_t r, uint8_t g, uint8_t b)
 {
-	rgb[0].val = r;
-	rgb[1].val = g;
-	rgb[2].val = b;
+	rgb[0].set = r;
+	rgb[1].set = g;
+	rgb[2].set = b;
 }
 
 
@@ -124,11 +129,17 @@ ISR(TIMER0_OVF_vect)
 
 	int16_t v = adc_sample(5) - bias;
 
+	/* Remove DC */
+
 	if(v > 0) bias ++;
 	if(v < 0) bias --;
 
+	/* Gain */
+
 	v = (shift > 0) ? (v >> shift) : (v << -shift);
-	
+
+	/* Calculate gain */
+
 	if(v > max) max = v;
 	if(max > 0) max --;
 
@@ -139,17 +150,21 @@ ISR(TIMER0_OVF_vect)
 		if(shift > 4) shift = 4;
 		if(shift < -4) shift = -4;
 	}
+
+	/* Comb filter */
 	
 	buf[p] = v; 
 	uint8_t pn = (p + 1) % BS;
 	int16_t m = (buf[p] * buf[pn]) >> 8;
 	mavg = (mavg * 3 + m * 1) >> 2;
-	pwm_set(mavg + 127);
+	pwm_set(v + 127);
+
+	/* Output data to port looped back to uart RX */
 
 	if(mavg < 0) {
-		PORTB |= 1;
+		PORTD |= (1<<PD2);
 	} else {
-		PORTB &= ~1;
+		PORTD &= ~(1<<PD2);
 	}
 	
 	p = pn;

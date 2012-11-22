@@ -116,19 +116,6 @@ int main(int argc, char **argv)
 			}
 
 			if(ev.type == SDL_MOUSEBUTTONDOWN) {
-				if(ev.button.button == 4) {
-					s += 0.05;
-					if(s < 0) s = 0;
-					if(s > 1) s = 1;
-					draw();
-				}
-				if(ev.button.button == 5) {
-					s -= 0.05;
-					if(s < 0) s = 0;
-					if(s > 1) s = 1;
-					draw();
-				}
-				update_color();
 			}
 
 			if(ev.type == SDL_VIDEORESIZE) {
@@ -222,8 +209,8 @@ void draw(void)
 		for(x=0; x<screen->w; x++) {
 
 			h = (float)x / (float)screen->w;
-			v = 2 * (float)y / (float)screen->h;
-			s = 2 - 2 * (float)y / (float)screen->h;
+			s =     2 * (float)y / (float)screen->h;
+			v = 2 - s;
 			if(s > 1) s = 1;
 			if(v > 1) v = 1;
 
