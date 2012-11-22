@@ -21,10 +21,7 @@ OBJCOPY = avr-objcopy
 SIZE	= avr-size
 AD	= sudo avrdude
 
-all: $(ELF) $(FHEX) tx
-
-tx: tx.c
-	gcc -g -O3 -Wall -Werror -o $@ $< `pkg-config --cflags --libs sdl`
+all: $(ELF) $(FHEX) 
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
