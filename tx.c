@@ -5,7 +5,6 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <stdint.h>
-#include <linux/soundcard.h>
 
 struct rb { 
         int16_t *data; 
@@ -23,6 +22,7 @@ float FREQ_1 = 1200.0;
 uint32_t hsv2rgb(double h, double s, double v);
 int sound_open(char *dev);
 void draw(void);
+void update_color(void);
 void send(char *buf);
 void gen_audio(void *data, Uint8 *stream, int len);
 
@@ -37,6 +37,8 @@ double t = 0;
 double h = 1;
 double s = 1;
 double v = 1;
+
+int R, G, B, dirty;
 int mx = 0;
 int my = 0;
 
@@ -44,38 +46,21 @@ struct rb *rb_data;
 struct rb *rb_audio;
 
 
-void gen_audio(void *data, uint8_t *stream, int len)
+Uint32 on_20hz_timer(Uint32 interval, void *_)
 {
-        int i;
-	int16_t *p = (void *)stream;
-	int b;
+	SDL_Event ev;
 
-	while(rb_used(rb_audio) < len) {
-
-		int v = 0;
-
-		if(rb_used(rb_data) > 0) {
-			char c = rb_pop(rb_data);
-			v = (((c ^ 0xff) << 1) | 0x1);
-		}
-
-		for(b=0; b<10; b++) {
-			for(i=0; i<(SRATE / BRATE); i++) {
-				int16_t y = cos(t * M_PI * 2) * 32000;
-				rb_push(rb_audio, y);
-				if(v & 1) {
-					t += FREQ_1 / SRATE; 
-				} else {
-					t += FREQ_0 / SRATE; 
-				}
-			}
-			v >>= 1;
-		}
+	if(dirty) {
+		char buf[32];
+		snprintf(buf, sizeof buf, "c%02x%02x%02x\n", R, G, B);
+		send(buf);
+		dirty = 0;
 	}
 
-        for(i=0; i<len/2; i++) {
-		*p++ = rb_pop(rb_audio);
-        }
+	ev.user.type = SDL_USEREVENT;
+	ev.user.code = 1;
+	SDL_PushEvent(&ev);
+	return interval;
 }
 
 
@@ -88,7 +73,7 @@ int main(int argc, char **argv)
 
 	//int fd = sound_open("/dev/dsp");
 
-	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER);
 
 	fmt.freq = SRATE;
 	fmt.format = AUDIO_S16;
@@ -108,6 +93,7 @@ int main(int argc, char **argv)
 	draw();
 
 	SDL_PauseAudio(0);
+	SDL_AddTimer(80, on_20hz_timer, NULL);
 
 	for(;;) {
 
@@ -116,54 +102,45 @@ int main(int argc, char **argv)
 			if(ev.type == SDL_KEYDOWN) {
 
 				switch(ev.key.keysym.sym) {
-					case SDLK_q:
-						FREQ_0 += 10;
-						break;
-					case SDLK_a:
-						FREQ_0 -= 10;
-						break;
-					case SDLK_w:
-						FREQ_1 += 10;
-						break;
-					case SDLK_s:
-						FREQ_1 -= 10;
-						break;
 					case 27:
 						exit(0);
 						break;
 					default:
+						{
+							char buf[16];
+							snprintf(buf, sizeof buf, "d%c\n", ev.key.keysym.sym);
+							send(buf);
+						}
 						break;
 				}
-
-				send("");
 			}
 
 			if(ev.type == SDL_MOUSEBUTTONDOWN) {
-				if(ev.button.button == 0) {
-					send("A");
-				}
 				if(ev.button.button == 4) {
 					s += 0.05;
+					if(s < 0) s = 0;
+					if(s > 1) s = 1;
+					draw();
 				}
 				if(ev.button.button == 5) {
 					s -= 0.05;
+					if(s < 0) s = 0;
+					if(s > 1) s = 1;
+					draw();
 				}
-				if(s < 0) s = 0;
-				if(s > 1) s = 1;
-				draw();
-				send("A");
+				update_color();
 			}
 
 			if(ev.type == SDL_VIDEORESIZE) {
 				screen = SDL_SetVideoMode(ev.resize.w, ev.resize.h, 32, SDL_HWSURFACE | SDL_RESIZABLE) ;
 				draw();
-				send("A");
+				update_color();
 			}
 
 			if(ev.type == SDL_MOUSEMOTION) {
 				mx = ev.motion.x;
 				my = ev.motion.y;
-				//send("A");
+				update_color();
 			}
 		}
 	}
@@ -209,7 +186,7 @@ int rb_pop(struct rb *rb)
 }
 
 
-void send(char *_)
+void update_color(void)
 {
 	uint32_t *v = screen->pixels + (my*screen->w + mx) * 4;
 
@@ -217,16 +194,22 @@ void send(char *_)
 	double g = (*v >>  8) & 0xff;
 	double b = (*v >>  0) & 0xff;
 
-	r = pow(1.0218971486541166, r);
-	g = pow(1.0218971486541166, g);
-	b = pow(1.0218971486541166, b);
+	R = pow(1.0218971486541166, r);
+	G = pow(1.0218971486541166, g);
+	B = pow(1.0218971486541166, b);
 
-	char buf[32];
-	snprintf(buf, sizeof buf, "r%.0f\ng%.0f\nb%.0f\n", r, g, b);
+	dirty = 1;
+	
+}
 
+
+void send(char *buf)
+{
 	char *p = buf;
-	while(*p) rb_push(rb_data, *p++);
-
+	while(*p) {
+		putchar(*p);
+		rb_push(rb_data, *p++);
+	}
 }
 
 
@@ -239,58 +222,16 @@ void draw(void)
 		for(x=0; x<screen->w; x++) {
 
 			h = (float)x / (float)screen->w;
-			v = 1 - (float)y / (float)screen->h;
+			v = 2 * (float)y / (float)screen->h;
+			s = 2 - 2 * (float)y / (float)screen->h;
+			if(s > 1) s = 1;
+			if(v > 1) v = 1;
 
 			*p++ = hsv2rgb(h, s, v);
 		}
 	}
 
 	SDL_Flip(screen);
-}
-
-
-int sound_open(char *dev)
-{
-	int r;
-	int fd;
-	int i;
-	int stereo = 0;
-	int format = AFMT_S16_LE;
-	int fragments = 0x00020002;
-	int srate = SRATE;
-	
-	fd = open(dev, O_RDONLY);
-
-	r=ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &fragments);
-	if(r==-1) {
-		printf("Error SNDCTL_DSP_SETFRAGMET : %s\n", strerror(errno));
-		exit(1);
-	}
-
-	r=ioctl(fd, SOUND_PCM_SETFMT, &format);
-	if(r==-1) {
-		printf("Error SOUND_PCM_SETFMT : %s\n", strerror(errno));
-		exit(1);
-	}
-	
-	i=stereo;
-	r=ioctl(fd, SNDCTL_DSP_STEREO, &stereo);
-	if(i != stereo) {
-		printf("Cant set channels to %d\n", i);
-		exit(1);
-	}
-	if(r==-1) {
-		printf("Error SNDCTL_DSP_STEREO : %s\n", strerror(errno));
-		exit(1);
-	}
-
-	r=ioctl(fd, SNDCTL_DSP_SPEED, &srate);
-	if(r==-1) {
-		printf("Error SNDCTL_DSP_SPEED : %s\n", strerror(errno));
-		exit(1);
-	}
-	
-	return(fd);
 }
 
 
@@ -321,6 +262,43 @@ uint32_t hsv2rgb(double h, double s, double v)
 
 	return SDL_MapRGB(screen->format, r*255, g*255, b*255);
 }
+
+
+void gen_audio(void *data, uint8_t *stream, int len)
+{
+        int i;
+	int16_t *p = (void *)stream;
+	int b;
+
+	while(rb_used(rb_audio) < len/2) {
+
+		int v = 0;
+
+		if(rb_used(rb_data) > 0) {
+			char c = rb_pop(rb_data);
+			v = (((c ^ 0xff) << 1) | 0x1);
+		}
+
+		for(b=0; b<10; b++) {
+			for(i=0; i<(SRATE / BRATE); i++) {
+				int16_t y = cos(t * M_PI * 2) * 32000;
+				rb_push(rb_audio, y);
+				if(v & 1) {
+					t += FREQ_1 / SRATE; 
+				} else {
+					t += FREQ_0 / SRATE; 
+				}
+			}
+			v >>= 1;
+		}
+	}
+
+        for(i=0; i<len/2; i++) {
+		*p++ = rb_pop(rb_audio);
+        }
+}
+
+
 
 /*
  * End

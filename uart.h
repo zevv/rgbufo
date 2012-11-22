@@ -1,12 +1,4 @@
 
-/*
- * Uart baudrate = fosc / (16 * (UBRR + 1)) [p.133] 
- *
- * UBRR = (fosc / baudrate) / 16 - 1
- *
- * These constants only apply when the xtal oscillator is 11.0592 Mhz !
- */
-
 #include <stdint.h>
 #include <stdlib.h>
 
