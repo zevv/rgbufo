@@ -38,7 +38,6 @@ double h = 1;
 double s = 1;
 double v = 1;
 
-int R, G, B, dirty;
 int mx = 0;
 int my = 0;
 int run = 0;
@@ -77,7 +76,6 @@ int main(int argc, char **argv)
 	draw();
 
 	SDL_PauseAudio(0);
-	SDL_AddTimer(70, on_timer, NULL);
 
 	for(;;) {
 
@@ -121,32 +119,6 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-
-Uint32 on_timer(Uint32 interval, void *_)
-{
-	SDL_Event ev;
-
-	if(run) {
-		if(mx < screen->w-1) {
-			mx ++;
-			update_color();
-		} else {
-			run = 0;
-		}
-	}
-
-	if(dirty) {
-		char buf[32];
-		snprintf(buf, sizeof buf, "c%02x%02x%02x\n", R, G, B);
-		send(buf);
-		dirty = 0;
-	}
-
-	ev.user.type = SDL_USEREVENT;
-	ev.user.code = 1;
-	SDL_PushEvent(&ev);
-	return interval;
-}
 
 
 struct rb *rb_new(size_t size)
@@ -194,21 +166,24 @@ void update_color(void)
 	double g = (*v >>  8) & 0xff;
 	double b = (*v >>  0) & 0xff;
 
-	R = pow(1.0218971486541166, r);
-	G = pow(1.0218971486541166, g);
-	B = pow(1.0218971486541166, b);
+	int R = pow(1.0218971486541166, r) - 1;
+	int G = pow(1.0218971486541166, g) - 1;
+	int B = pow(1.0218971486541166, b) - 1;
 
-	dirty = 1;
-	
+	char buf[32];
+	snprintf(buf, sizeof buf, "c%02x%02x%02x\n", R, G, B);
+	send(buf);
 }
 
 
 void send(char *buf)
 {
-	char *p = buf;
-	while(*p) {
-		putchar(*p);
-		rb_push(rb_data, *p++);
+	if(rb_used(rb_data) == 0) {
+		char *p = buf;
+		while(*p) {
+			putchar(*p);
+			rb_push(rb_data, *p++);
+		}
 	}
 }
 

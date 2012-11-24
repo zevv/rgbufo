@@ -1,7 +1,11 @@
+
+//448 uS
+
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdio.h>
+#include <stdint.h>
 
 #include "uart.h"
 #include "printd.h"
@@ -18,7 +22,8 @@ struct rgb {
 
 void handle_char(char c);
 void led_set_rgb(uint8_t r, uint8_t g, uint8_t b);
-void do_pwm(void);
+void do_pwm_p(void);
+void do_pwm_s(void);
 
 
 volatile struct rgb rgb[3] = { 
@@ -44,8 +49,18 @@ int main(void)
 
 	sei();
 
+	led_set_rgb(128, 128, 128);
+
 	for(;;) {
-		do_pwm();
+		uint8_t i;
+
+		for(i=0; i<3; i++) {
+			volatile struct rgb *r = &rgb[i];
+			if(r->val < r->set) r->val ++;
+			if(r->val > r->set) r->val --;
+		}
+
+		do_pwm_p();
 
 		int c = uart_rx();
 
@@ -90,19 +105,35 @@ void handle_char(char c)
 }
 
 
-void do_pwm(void)
+void do_pwm_p(void)
+{
+	uint8_t i, c;
+		
+	for(c=0; c<3; c++) {
+		volatile struct rgb *r = &rgb[c];
+		if(r->val) PORTC |= r->mask;
+	}
+
+	for(i=0; i<255; i++) {
+		for(c=0; c<3; c++) {
+			volatile struct rgb *r = &rgb[c];
+			if(i == r->val) {
+				PORTC &= ~r->mask;
+			}
+		}
+	}
+}
+
+
+void do_pwm_s(void)
 {
 	uint8_t c, i;
 	volatile struct rgb *r = &rgb[0];
 
 	for(c=0; c<3; c++) {
-
-		if(r->val < r->set) r->val ++;
-		if(r->val > r->set) r->val --;
-
-		if(r->val > 1) PORTC &= ~r->mask;
-		for(i=0; i<255; i++) if(i == r->val) PORTC |= r->mask;
-		PORTC |= r->mask;
+		if(r->val > 1) PORTC |= r->mask;
+		for(i=0; i<255; i++) if(i == r->val) PORTC &= ~r->mask;
+		PORTC &= ~r->mask;
 		r++;
 	}
 }
@@ -155,7 +186,7 @@ ISR(TIMER0_OVF_vect)
 		if(shift < -4) shift = -4;
 	}
 
-	/* Comb filter */
+	/* Correlator */
 	
 	buf[p] = v; 
 	uint8_t pn = (p + 1) % BS;
