@@ -49,15 +49,17 @@ int main(void)
 
 	sei();
 
-	led_set_rgb(128, 128, 128);
+	led_set_rgb(30, 30, 30);
 
 	for(;;) {
-		uint8_t i;
+		uint8_t i, j;
 
 		for(i=0; i<3; i++) {
 			volatile struct rgb *r = &rgb[i];
-			if(r->val < r->set) r->val ++;
-			if(r->val > r->set) r->val --;
+			for(j=0; j<4; j++) {
+				if(r->val < r->set) r->val ++;
+				if(r->val > r->set) r->val --;
+			}
 		}
 
 		do_pwm_p();
@@ -149,55 +151,52 @@ void led_set_rgb(uint8_t r, uint8_t g, uint8_t b)
 
 ISR(TIMER0_OVF_vect)
 {
-	TCNT0 = 0xa0;
+	//TCNT0 = 0x6d; /* 13.2khz */
+	__asm("nop");
+	TCNT0 = 0xb9; /* 26.4 khz */
 	
-#define BS 16
+#define RB_CORR_LEN 12
+#define RB_FILT_LEN 22
 
-	static int8_t buf[BS];
-	static uint8_t p = 0;
-	static int16_t mavg = 0;
-	static int16_t max = 0;
-	static int8_t shift = 5;
-	static int16_t bias = 0;
+	static int16_t bias = 512;
+	static uint8_t rb_filt[RB_FILT_LEN] = { 0 };
+	static uint8_t p_filt = 0;
+	static uint8_t filt_tot = 0;
+	static uint8_t n = 0;
 
 	PORTD |= (1<<PD7);
 
-	int16_t v = adc_sample(5) - bias;
+	int16_t v = adc_sample(5);
 
 	/* Remove DC */
 
-	if(v > 0) bias ++;
-	if(v < 0) bias --;
-
-	/* Gain */
-
-	v = (shift > 0) ? (v >> shift) : (v << -shift);
-
-	/* Calculate gain */
-
-	if(v > max) max = v;
-	if(max > 0) max --;
-
-	static uint8_t n = 0;
-	if(n-- == 0) {
-		if(max >= 0x085) shift++;
-		if(max <= 0x01f) shift--;
-		if(shift > 4) shift = 4;
-		if(shift < -4) shift = -4;
+	if(n++ == 0) {
+		if(v > bias) bias ++;
+		if(v < bias) bias --;
 	}
 
-	/* Correlator */
-	
-	buf[p] = v; 
-	uint8_t pn = (p + 1) % BS;
-	int16_t m = (buf[p] * buf[pn]) >> 8;
-	mavg = (mavg * 3 + m * 1) >> 2;
-	pwm_set(mavg + 127);
-	p = pn;
+	/* Correlator: multiple sample with delayed sample, uses xor as cheap
+	 * multiply */
+
+	static uint16_t corrhist = 0;
+	uint8_t w = v > bias;
+
+	corrhist = (corrhist >> 1) | (w<<RB_CORR_LEN);
+	uint8_t m = (w ^ corrhist) & 1;
+
+	rb_filt[p_filt] = m;
+	uint8_t p_filt_next = p_filt + 1;
+	if (p_filt_next >= RB_CORR_LEN) p_filt_next = 0;
+	filt_tot += rb_filt[p_filt] - rb_filt[p_filt_next];
+	p_filt = p_filt_next;
+
+	pwm_set(filt_tot * 8 + 128);
 
 	/* Output data to port looped back to uart RX */
 
-	if(mavg < 0) {
+#define DISC 6
+
+	if(filt_tot < DISC) {
 		PORTD |= (1<<PD2);
 	} else {
 		PORTD &= ~(1<<PD2);
