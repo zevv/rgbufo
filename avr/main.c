@@ -58,7 +58,7 @@ int main(void)
 
 		for(i=0; i<3; i++) {
 			volatile struct rgb *r = &rgb[i];
-			for(j=0; j<4; j++) {
+			for(j=0; j<2; j++) {
 				if(r->val < r->set) r->val ++;
 				if(r->val > r->set) r->val --;
 			}

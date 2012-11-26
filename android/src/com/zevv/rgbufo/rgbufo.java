@@ -45,19 +45,25 @@ public class rgbufo extends Activity implements SensorEventListener
 	{
 		int x, y;
 
-		Log.i("rgbufo", "draw start ...");
-
 		int d = 4;
 
 		for(y=0; y<ch; y+=d) {
 			for(x=0; x<cw; x+=d) {
 
-				double h =     (double)x / (double)cw;
-				double s = 2 * (double)y / (double)ch;
-				double v = 2 - s;
+				double h = (double)y / (double)ch;
+				double s = (double)x / (double)cw;
+				double v = 1.0;
 
-				s = (s>1) ? 1 : s;
-				v = (v>1) ? 1 : v;
+				int xx = cw/2 - x;
+				int yy = ch/2 - y;
+
+				h = (Math.atan2(xx, yy) + 3.1415) / 6.2830;
+				s = Math.hypot(xx, yy) / (cw/2);
+
+				if(h < 0) h = 0;
+				if(h > 1) h = 1;
+				if(s < 0) s = 0;
+				if(s > 1) s = 1;
 
 				double r, g, b, f, m, n;
 				int i;
@@ -86,8 +92,6 @@ public class rgbufo extends Activity implements SensorEventListener
 				canvas.drawPoint(x, y, paint);
 			}
 		}
-		
-		Log.i("rgbufo", "draw done");
 	}
 
 
@@ -112,7 +116,6 @@ public class rgbufo extends Activity implements SensorEventListener
 			canvas.setBitmap(bitmap);
 			super.onSizeChanged(cw, ch, pw, ph);
 			do_draw();
-			//Log.i("rgbufo", "sizeChanged");
 		}
 
 
@@ -183,10 +186,39 @@ public class rgbufo extends Activity implements SensorEventListener
 		}
 	}
 	
-	
+
+	private void send_byte(int b)
+	{
+		if(b >= 0xfe) {
+			fifo.add(0xfe);
+			fifo.add(b);
+		} else {
+			fifo.add(b);
+		}
+	}
+
+
+	private void send(int data[])
+	{
+		int i;
+		int sum = 0;
+
+		for(i=0; i<data.length; i++) {
+			int b = data[i] & 0xff;
+			sum = (sum + b) & 0xff;
+			send_byte(b);
+		}
+		send_byte(sum ^ 0xff);
+		fifo.add(0xff);
+	}
+
+
 	private void send_color(int x, int y, double p)
 	{
 		if(fifo.size() > 16) return;
+
+		if(x < 0) x = 0; if(x > cw) x = cw-1;
+		if(y < 0) y = 0; if(y > ch) y = ch-1;
 
 		int c = bitmap.getPixel(x, y);
 
@@ -198,25 +230,19 @@ public class rgbufo extends Activity implements SensorEventListener
 
 		/* Gamma correction */
 
-		r = (int)Math.pow(1.022, r);
-		g = (int)Math.pow(1.022, g);
-		b = (int)Math.pow(1.022, b);
+		r = (int)Math.pow(1.022, r) - 1;
+		g = (int)Math.pow(1.022, g) - 1;
+		b = (int)Math.pow(1.022, b) - 1;
 
 		if(r > 255) r = 255;
 		if(g > 255) g = 255;
 		if(b > 255) b = 255;
+		
+		Log.i("rgbufo", String.format("pixel: #%02x%02x%02x", r, g, b));
 
-		String buf = String.format("c%02x%02x%02x\n", r, g, b);
-		Log.i("rgbufo", "pixel: " + buf);
-
-		byte[] bs = buf.getBytes();
-		int i;
-		for(i=0; i<bs.length; i++) {
-			fifo.add((int)bs[i]);
-		}
+		int[] data = { 'c', r, g, b };
+		send(data);
 	}
-
-
 
 
 	/*
@@ -226,7 +252,6 @@ public class rgbufo extends Activity implements SensorEventListener
 	@Override
 	public void onCreate(Bundle saved)
 	{
-		//Log.i("rgbufo", "onCreate");
 		super.onCreate(saved);
 		sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 
@@ -242,7 +267,6 @@ public class rgbufo extends Activity implements SensorEventListener
 	@Override
 	public void onDestroy()
 	{
-		//Log.i("rgbufo", "onDestroy");
 		super.onDestroy();
 	}
 
@@ -250,7 +274,6 @@ public class rgbufo extends Activity implements SensorEventListener
 	@Override
 	public void onStart()
 	{
-		//Log.i("rgbufo", "onStart");
 		super.onStart();
 		
 		/* Init audio */
@@ -276,17 +299,23 @@ public class rgbufo extends Activity implements SensorEventListener
 	}
 
 
+	private double pp = 0;
+
 	@Override
 	public boolean onTouchEvent(MotionEvent ev) {
 		int x = (int)ev.getX();
 		int y = (int)ev.getY();
-		double p = (ev.getPressure() - 0.15) * 5;
+		double p = (ev.getPressure() - 0.15) * 8;
 
-		if(p < 0) p = 0;
+		if(p < 0) {
+			p = 0;
+			pp = 0;
+		}
 		if(p > 1) p = 1;
+
+		pp = pp * 0.6 + p * 0.4;
 			
-		//Log.i("rgbufo", "pressure " + p);
-		send_color(x, y, p);
+		send_color(x, y, pp);
 		return false;
 	}
 
@@ -297,7 +326,6 @@ public class rgbufo extends Activity implements SensorEventListener
 	{
 		double ry = ev.values[0];
 		double rz = ev.values[1];
-
 	}
 
 
@@ -311,7 +339,6 @@ public class rgbufo extends Activity implements SensorEventListener
 	@Override
 	public void onStop()
 	{
-		//Log.i("rgbufo", "onStop");
 		super.onStop();
 
 		audiotask.cancel(true);
@@ -322,5 +349,7 @@ public class rgbufo extends Activity implements SensorEventListener
 	}
 }
 
-/* End */
+/*
+ * vi: ft=java ts=3 sw=3
+ */
 
