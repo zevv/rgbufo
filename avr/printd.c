@@ -21,7 +21,7 @@ void printd(const char *fmt, ...)
 	while(*p) {
 		if(*p == '%') {
 			val = va_arg(va, int);
-			itoa(val, buf, 10);
+			itoa(val, buf, *(p+1) == 'x' ? 16 : 10);
 			printd(buf);
 			p++;
 		} else {

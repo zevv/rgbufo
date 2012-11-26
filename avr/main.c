@@ -20,7 +20,7 @@ struct rgb {
 };
 
 
-void handle_char(char c);
+void handle_char(uint8_t c);
 void led_set_rgb(uint8_t r, uint8_t g, uint8_t b);
 void do_pwm_p(void);
 void do_pwm_s(void);
@@ -46,6 +46,8 @@ int main(void)
 
 	TCCR0 = (1<<CS01);
 	TIMSK |= (1<<TOIE0);
+
+	printd("Hello\n");
 
 	sei();
 
@@ -76,33 +78,48 @@ int main(void)
 }
 
 
-void handle_char(char c)
+void handle_pkt(uint8_t *buf, uint8_t len)
 {
-	static int bufptr = 0;
-	static char buf[32];
+	if(buf[0] == 'c') {
+		led_set_rgb(buf[1], buf[2], buf[3]);
+	}
+}
 
-	if(c == 13 || c == 10) {
 
-		if(buf[0] == 'd') {
-			uart_tx(buf[1]);
+void handle_char(uint8_t c)
+{
+	static uint8_t buf[32];
+	static uint8_t p = 0;
+	static uint8_t escape = 0;
+
+	//uart_tx('a');
+
+	if(escape) {
+		if(p < sizeof(buf)-1) buf[p++] = c;
+		escape = 0;
+	} else {
+		switch(c) {
+			case 0xff:
+				if(p > 1) {
+					uint8_t sum = 0;
+					uint8_t i;
+					for(i=0; i<p-1; i++) {
+						sum += buf[i];
+					}
+					sum ^= 0xff;
+					if(sum == buf[p-1]) {
+						handle_pkt(buf, p-1);
+					}
+				}
+				p = 0;
+				break;
+			case 0xfe:
+				escape = 1;
+				break;
+			default:
+				if(p < sizeof(buf)-1) buf[p++] = c;
+				break;
 		}
-
-		if(buf[0] == 'c') {
-			uint32_t c = strtol(buf+1, NULL, 16);
-			uint8_t r = (c >> 16) & 0xff;
-			uint8_t g = (c >>  8) & 0xff;
-			uint8_t b = (c >>  0) & 0xff;
-			led_set_rgb(r, g, b);
-		}
-
-		bufptr = 0;
-		buf[0] = 0;
-
-	} else if(bufptr < sizeof(buf) - 2) {
-
-		buf[bufptr] = c;
-		buf[bufptr+1] = 0;
-		bufptr++;
 	}
 }
 
@@ -149,23 +166,21 @@ void led_set_rgb(uint8_t r, uint8_t g, uint8_t b)
 }
 
 
+#define HIST_LEN 12	/* number of samples in correlator history */
+#define FILT_LEN 22	/* number of samples in moving average filter */
+
 ISR(TIMER0_OVF_vect)
 {
-	//TCNT0 = 0x6d; /* 13.2khz */
-	__asm("nop");
-	TCNT0 = 0xb9; /* 26.4 khz */
-	
-#define RB_CORR_LEN 12
-#define RB_FILT_LEN 22
-
 	static int16_t bias = 512;
-	static uint8_t rb_filt[RB_FILT_LEN] = { 0 };
+	static uint8_t rb_filt[FILT_LEN] = { 0 };
 	static uint8_t p_filt = 0;
 	static uint8_t filt_tot = 0;
 	static uint8_t n = 0;
+	static uint16_t hist = 0;
 
-	PORTD |= (1<<PD7);
-
+	__asm("nop");
+	TCNT0 = 0xb9; /* 26.4 khz */
+	
 	int16_t v = adc_sample(5);
 
 	/* Remove DC */
@@ -175,18 +190,21 @@ ISR(TIMER0_OVF_vect)
 		if(v < bias) bias --;
 	}
 
-	/* Correlator: multiple sample with delayed sample, uses xor as cheap
-	 * multiply */
+	/* Convert sampled value to square wave */
 
-	static uint16_t corrhist = 0;
 	uint8_t w = v > bias;
 
-	corrhist = (corrhist >> 1) | (w<<RB_CORR_LEN);
-	uint8_t m = (w ^ corrhist) & 1;
+	/* Save HIST_LEN samples of history */
 
-	rb_filt[p_filt] = m;
+	hist = (hist>>1) | (w<<HIST_LEN);
+	uint8_t m = (w ^ hist) & 1;
+	
+	/* Correlator: multiply sample with delayed sample, uses xor as cheap
+	 * multiply */
+	
 	uint8_t p_filt_next = p_filt + 1;
-	if (p_filt_next >= RB_CORR_LEN) p_filt_next = 0;
+	if (p_filt_next >= HIST_LEN) p_filt_next = 0;
+	rb_filt[p_filt] = m;
 	filt_tot += rb_filt[p_filt] - rb_filt[p_filt_next];
 	p_filt = p_filt_next;
 
@@ -201,8 +219,6 @@ ISR(TIMER0_OVF_vect)
 	} else {
 		PORTD &= ~(1<<PD2);
 	}
-	
-	PORTD &= ~(1<<PD7);
 }
 
 

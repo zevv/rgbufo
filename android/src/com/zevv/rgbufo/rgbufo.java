@@ -1,6 +1,10 @@
 
 package com.zevv.rgbufo;
 
+import java.io.IOException;
+import java.util.concurrent.ExecutionException;
+import java.util.LinkedList;
+
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -17,15 +21,12 @@ import android.media.AudioTrack;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.MotionEvent;
 import android.view.View;
-import android.view.View.OnTouchListener;
 import android.view.Window;
+import android.view.MotionEvent;
+import android.view.View.OnTouchListener;
 import android.widget.TextView;
 import android.widget.Toast;
-import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-import java.util.LinkedList;
 
 public class rgbufo extends Activity implements SensorEventListener
 {
@@ -39,48 +40,54 @@ public class rgbufo extends Activity implements SensorEventListener
 	private LinkedList<Integer> fifo = new LinkedList<Integer>();
 	private double t = 0;
 	private SensorManager sensorManager = null;
-	private double H = 0, S = 1.0, L = 1.0;
-	private int srate = 22050;
-	private int brate = 1200;
-
 
 	private void do_draw()
 	{
 		int x, y;
 
-		Log.i("rgbufo", "draw start");
+		Log.i("rgbufo", "draw start ...");
 
-		double h = H;
-		double s = L;
-		double v = 2 - L;
+		int d = 4;
 
-		s = (s>1) ? 1 : s;
-		v = (v>1) ? 1 : v;
+		for(y=0; y<ch; y+=d) {
+			for(x=0; x<cw; x+=d) {
 
-		double r, g, b, f, m, n;
-		int i;
+				double h =     (double)x / (double)cw;
+				double s = 2 * (double)y / (double)ch;
+				double v = 2 - s;
 
-		h *= 6.0;
-		i = (int)Math.floor(h);
-		f = (h) - i;
-		if ((i & 1) != 1) f = 1 - f;
-		m = v * (1 - s);
-		n = v * (1 - s * f);
-		if(i<0) i=0;
-		if(i>6) i=6;
-		switch (i) {
-			case 6:
-			case 0: r=v; g=n; b=m; break;
-			case 1: r=n; g=v; b=m; break;
-			case 2: r=m; g=v; b=n; break;
-			case 3: r=m; g=n; b=v; break;
-			case 4: r=n; g=m; b=v; break;
-			case 5: r=v; g=m; b=n; break;
-			default: r=g=b=1;
+				s = (s>1) ? 1 : s;
+				v = (v>1) ? 1 : v;
+
+				double r, g, b, f, m, n;
+				int i;
+
+				h *= 6.0;
+				i = (int)Math.floor(h);
+				f = (h) - i;
+				if ((i & 1) != 1) f = 1 - f;
+				m = v * (1 - s);
+				n = v * (1 - s * f);
+				if(i<0) i=0;
+				if(i>6) i=6;
+				switch (i) {
+					case 6:
+					case 0: r=v; g=n; b=m; break;
+					case 1: r=n; g=v; b=m; break;
+					case 2: r=m; g=v; b=n; break;
+					case 3: r=m; g=n; b=v; break;
+					case 4: r=n; g=m; b=v; break;
+					case 5: r=v; g=m; b=n; break;
+					default: r=g=b=1;
+				}
+
+				paint.setARGB(255, (int)(r*255), (int)(g*255), (int)(b*255));
+				canvas.drawRect(x, y, x+d, y+d, paint);	
+				canvas.drawPoint(x, y, paint);
+			}
 		}
-
-		paint.setARGB(255, (int)(r*255), (int)(g*255), (int)(b*255));
-		canvas.drawRect(0, 0, cw, ch, paint);	
+		
+		Log.i("rgbufo", "draw done");
 	}
 
 
@@ -88,7 +95,7 @@ public class rgbufo extends Activity implements SensorEventListener
 	 * View
 	 */
 
-	private class GraphView extends View 
+	private class GraphView extends View
 	{
 
 		public GraphView(Context context) {
@@ -117,6 +124,7 @@ public class rgbufo extends Activity implements SensorEventListener
 				canvas.drawBitmap(bitmap, 0, 0, null);
 			}
 		}
+
 	}
 
 
@@ -131,12 +139,12 @@ public class rgbufo extends Activity implements SensorEventListener
 		private void write_bit(int bit)
 		{
 			int i;
-			int len = srate / brate;
+			int len = 48000 / 1200;
 			short[] buffer = new short[len];
 
 			for(i=0; i<len; i++) {
 				buffer[i] = (short)(Math.cos(t * 3.141592 * 2) * 20000.0);
-				t += ((bit == 0) ? 2200.0 : 1200.0) / srate;
+				t += ((bit == 0) ? 2200 : 1200) / 48000.0;
 			}
 			track.write(buffer, 0, len);
 		}
@@ -174,6 +182,41 @@ public class rgbufo extends Activity implements SensorEventListener
 
 		}
 	}
+	
+	
+	private void send_color(int x, int y, double p)
+	{
+		if(fifo.size() > 16) return;
+
+		int c = bitmap.getPixel(x, y);
+
+		/* Get pixel value from canvas */
+
+		int r = (int)(((c >> 16) & 0xff) * p);
+		int g = (int)(((c >>  8) & 0xff) * p);
+		int b = (int)(((c >>  0) & 0xff) * p);
+
+		/* Gamma correction */
+
+		r = (int)Math.pow(1.022, r);
+		g = (int)Math.pow(1.022, g);
+		b = (int)Math.pow(1.022, b);
+
+		if(r > 255) r = 255;
+		if(g > 255) g = 255;
+		if(b > 255) b = 255;
+
+		String buf = String.format("c%02x%02x%02x\n", r, g, b);
+		Log.i("rgbufo", "pixel: " + buf);
+
+		byte[] bs = buf.getBytes();
+		int i;
+		for(i=0; i<bs.length; i++) {
+			fifo.add((int)bs[i]);
+		}
+	}
+
+
 
 
 	/*
@@ -185,6 +228,7 @@ public class rgbufo extends Activity implements SensorEventListener
 	{
 		//Log.i("rgbufo", "onCreate");
 		super.onCreate(saved);
+		sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
 
 		requestWindowFeature(Window.FEATURE_NO_TITLE);
 			
@@ -192,16 +236,6 @@ public class rgbufo extends Activity implements SensorEventListener
 		setContentView(gv);
 
 		canvas.drawColor(Color.BLACK);
-		sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-	}
-
-
-	@Override
-	protected void onResume() {
-		super.onResume();
-		sensorManager.registerListener(this, 
-				sensorManager.getDefaultSensor(Sensor.TYPE_ORIENTATION), 
-				SensorManager.SENSOR_DELAY_GAME);
 	}
 
 
@@ -222,13 +256,13 @@ public class rgbufo extends Activity implements SensorEventListener
 		/* Init audio */
 
 		int buflen = AudioTrack.getMinBufferSize(
-				srate, 
+				48000, 
 				AudioFormat.CHANNEL_CONFIGURATION_MONO,
 				AudioFormat.ENCODING_PCM_16BIT);
 
 		track = new AudioTrack(
 				AudioManager.STREAM_MUSIC, 
-				srate, 
+				48000, 
 				AudioFormat.CHANNEL_CONFIGURATION_MONO, 
 				AudioFormat.ENCODING_PCM_16BIT, 
 				buflen, 
@@ -241,46 +275,21 @@ public class rgbufo extends Activity implements SensorEventListener
 	
 	}
 
-	private void send_color(int x, int y)
-	{
-		if(fifo.size() > 16) return;
-
-		int c = bitmap.getPixel(x, y);
-
-		/* Get pixel value from canvas */
-
-		int r = (c >> 16) & 0xff;
-		int g = (c >>  8) & 0xff;
-		int b = (c >>  0) & 0xff;
-
-		/* Gamma correction */
-
-		r = (int)Math.pow(1.0218971486541166, r);
-		g = (int)Math.pow(1.0218971486541166, g);
-		b = (int)Math.pow(1.0218971486541166, b);
-
-		String buf = String.format("c%02x%02x%02x\n", r, g, b);
-		Log.i("rgbufo", "pixel: " + buf);
-
-		byte[] bs = buf.getBytes();
-		int i;
-		for(i=0; i<bs.length; i++) {
-			fifo.add((int)bs[i]);
-		}
-	}
-
 
 	@Override
 	public boolean onTouchEvent(MotionEvent ev) {
 		int x = (int)ev.getX();
 		int y = (int)ev.getY();
-		send_color(x, y);
+		double p = (ev.getPressure() - 0.15) * 5;
+
+		if(p < 0) p = 0;
+		if(p > 1) p = 1;
+			
+		//Log.i("rgbufo", "pressure " + p);
+		send_color(x, y, p);
 		return false;
 	}
 
-
-	private double ory = 0;
-	private double orz = 0;
 	
 
 	@Override
@@ -289,19 +298,6 @@ public class rgbufo extends Activity implements SensorEventListener
 		double ry = ev.values[0];
 		double rz = ev.values[1];
 
-		H += (ry - ory) / 80;
-		L += (rz - orz) / 40;
-
-		if(H < 0) H = 0;
-		if(H > 1) H = 1;
-		if(L < 0) L = 0;
-		if(L > 2) L = 2;
-		
-		ory = ry;
-		orz = rz;
-
-		if(gv != null) gv.invalidate();
-		send_color(0, 0);
 	}
 
 
@@ -309,6 +305,7 @@ public class rgbufo extends Activity implements SensorEventListener
 	public void onAccuracyChanged(Sensor arg0, int arg1) {
 	
 	}
+
 
 
 	@Override

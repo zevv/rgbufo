@@ -23,7 +23,7 @@ uint32_t hsv2rgb(double h, double s, double v);
 Uint32 on_timer(Uint32 interval, void *_);
 void draw(void);
 void update_color(void);
-void send(char *buf);
+void send(void *buf, size_t len);
 void gen_audio(void *data, Uint8 *stream, int len);
 
 struct rb *rb_new(size_t size);
@@ -91,13 +91,14 @@ int main(int argc, char **argv)
 						{
 							char buf[16];
 							snprintf(buf, sizeof buf, "d%c\n", ev.key.keysym.sym);
-							send(buf);
+							send(buf, strlen(buf));
 						}
 						break;
 				}
 			}
 
 			if(ev.type == SDL_MOUSEBUTTONDOWN) {
+				update_color();
 				run = 1;
 			}
 
@@ -166,25 +167,54 @@ void update_color(void)
 	double g = (*v >>  8) & 0xff;
 	double b = (*v >>  0) & 0xff;
 
-	int R = pow(1.0218971486541166, r) - 1;
-	int G = pow(1.0218971486541166, g) - 1;
-	int B = pow(1.0218971486541166, b) - 1;
+	int R = pow(1.022, r) - 1;
+	int G = pow(1.022, g) - 1;
+	int B = pow(1.022, b) - 1;
 
-	char buf[32];
-	snprintf(buf, sizeof buf, "c%02x%02x%02x\n", R, G, B);
-	send(buf);
+	if(R > 255) R = 255;
+	if(G > 255) G = 255;
+	if(B > 255) B = 255;
+
+	char buf[4];
+	buf[0] = 'c';
+	buf[1] = R;
+	buf[2] = G;
+	buf[3] = B;
+	send(buf, 4);
 }
 
 
-void send(char *buf)
+int send_byte(uint8_t b)
 {
-	if(rb_used(rb_data) == 0) {
-		char *p = buf;
-		while(*p) {
-			putchar(*p);
-			rb_push(rb_data, *p++);
-		}
+	if(b >= 0xfe) {
+		rb_push(rb_data, 0xfe);
+		rb_push(rb_data, b);
+		printf("fe %02x ", b);
+		return 2;
+	} else {
+		printf("%02x ", b);
+		rb_push(rb_data, b);
+		return 1;
 	}
+}
+
+
+void send(void *buf, size_t len)
+{
+	uint8_t *p = buf;
+	uint8_t sum = 0;
+	int i;
+
+	if(rb_used(rb_data) > 0) return;
+	
+	for(i=0; i<len; i++) {
+		send_byte(p[i]);
+		sum += p[i];
+	}
+	send_byte(sum ^ 0xff);
+	rb_push(rb_data, 0xff);
+
+	printf("\n");
 }
 
 
@@ -247,10 +277,10 @@ void gen_audio(void *data, uint8_t *stream, int len)
 
 	while(rb_used(rb_audio) < len/2) {
 
-		int v = 0;
+		unsigned v = 0;
 
 		if(rb_used(rb_data) > 0) {
-			char c = rb_pop(rb_data);
+			unsigned c = rb_pop(rb_data);
 			v = (((c ^ 0xff) << 1) | 0x1);
 		}
 
