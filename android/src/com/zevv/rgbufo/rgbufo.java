@@ -58,7 +58,7 @@ public class rgbufo extends Activity implements SensorEventListener
 				int yy = ch/2 - y;
 
 				h = (Math.atan2(xx, yy) + 3.1415) / 6.2830;
-				s = Math.hypot(xx, yy) / (cw/2);
+				s = 1.2 * Math.hypot(xx, yy) / (cw/2) - 0.2;
 
 				if(h < 0) h = 0;
 				if(h > 1) h = 1;
@@ -215,7 +215,7 @@ public class rgbufo extends Activity implements SensorEventListener
 
 	private void send_color(int x, int y, double p)
 	{
-		if(fifo.size() > 16) return;
+		if(p > 0 && fifo.size() > 0) return;
 
 		if(x < 0) x = 0; if(x > cw) x = cw-1;
 		if(y < 0) y = 0; if(y > ch) y = ch-1;
@@ -299,23 +299,31 @@ public class rgbufo extends Activity implements SensorEventListener
 	}
 
 
-	private double pp = 0;
+	private double pmax = 0.5;
+	private double pavg = 0;
 
 	@Override
 	public boolean onTouchEvent(MotionEvent ev) {
 		int x = (int)ev.getX();
 		int y = (int)ev.getY();
-		double p = (ev.getPressure() - 0.15) * 8;
+		int a = ev.getAction();
 
-		if(p < 0) {
-			p = 0;
-			pp = 0;
+		switch(a) {
+			case MotionEvent.ACTION_MOVE:
+				double p = ev.getPressure();
+				if(p > pmax) pmax = p;
+				pmax *= 0.99;
+				p = p / pmax;
+				if(p < 0) p = 0;
+				if(p > 1) p = 1;
+				pavg = pavg * 0.6 + p * 0.4;
+				send_color(x, y, pavg);
+				break;
+			case MotionEvent.ACTION_UP:
+				send_color(x, y, 0);
+				break;
 		}
-		if(p > 1) p = 1;
 
-		pp = pp * 0.6 + p * 0.4;
-			
-		send_color(x, y, pp);
 		return false;
 	}
 

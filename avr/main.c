@@ -26,7 +26,7 @@ void do_pwm_p(void);
 void do_pwm_s(void);
 
 
-volatile struct rgb rgb[3] = { 
+struct rgb rgb[3] = { 
 	{ .mask = (1<<PC2) },
 	{ .mask = (1<<PC1) },
 	{ .mask = (1<<PC0) }
