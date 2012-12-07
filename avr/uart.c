@@ -1,7 +1,3 @@
-/**
- * \file uart.c
- * \brief Interrupt driven UART handling
- */
 
 #include <stdint.h>
 #include <stdio.h>
@@ -10,52 +6,62 @@
 
 #include "uart.h"
 
-#define RB_SIZE 128
+#define RB_SIZE 32
 
 struct ringbuffer_t {
-	uint8_t buf[RB_SIZE];
 	uint8_t head;
 	uint8_t tail;
+	uint8_t buf[RB_SIZE];
 };
 
-int debug_putchar(char c);
+static volatile struct ringbuffer_t rb = { 0, 0 };
+static volatile struct ringbuffer_t rb_rx = { 0, 0 };
 
-volatile struct ringbuffer_t rb_rx;
-volatile struct ringbuffer_t rb_tx;
-
-
-/*
- * Initialize the UART. Should be called before any of the other uart functions
- * is used
- */
- 
-void uart_init(uint16_t baudrate)
+static int uart_putc(char c, FILE *f)
 {
-	UBRRH = (baudrate >> 8);			/* Set the baudrate [p.132] */
-	UBRRL = (baudrate & 0xff);			
-	UCSRB = (1<<RXCIE) | (1<<RXEN) | (1<<TXEN);	/* Enable receiver and transmitter and rx interrupts [p.136] */
-	UCSRC = (1<<URSEL) | (1<<UCSZ1) | (1<<UCSZ0);	/* Set to no parity, 8 data bits, 1 stopbit */
-
-}
-
-
-/*
- * Write one character to the transmit ringbuffer
- */ 
- 
-int uart_tx(char c)
-{
-	uint8_t head;
-	head = (rb_tx.head + 1) % sizeof(rb_tx.buf);
-	
-	while(rb_tx.tail == head);	/* Wait for free space in the buffer */
-	rb_tx.buf[rb_tx.head] = c;	/* Put the char in the ringbuffer */
-	rb_tx.head = head;		/* Increase head ptr */
-	UCSRB |= (1<<UDRIE);		/* Enable TX-reg empty isr */
-
+	uart_tx(c);
 	return 0;
 }
 
+/*
+ * Initialize the UART. 
+ */
+
+void uart_init(uint16_t baudrate_divider)
+{
+	rb.head = rb.tail = 0;
+
+	/* Set baudrate, no parity, 8 databits 1 stopbit */
+
+	UBRR0H = (baudrate_divider >> 8);
+	UBRR0L = (baudrate_divider & 0xff);			
+	UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);
+
+	/* Enable receiver and transmitter and rx interrupts */
+
+	UCSR0B = (1<<RXCIE0) | (1<<RXEN0) | (1<<TXEN0);	
+
+	/* Uart is stdout */
+
+	fdevopen(uart_putc, NULL);
+}
+
+
+/*
+ * Write one character to the transmit ringbuffer and enable TX-reg-empty interrupt
+ */ 
+ 
+void uart_tx(uint8_t c)
+{
+	uint8_t head;
+	head = (rb.head + 1) % RB_SIZE;
+//	while(rb.tail == head);
+
+	rb.buf[rb.head] = c;
+	rb.head = head;
+
+	UCSR0B |= (1<<UDRIE0);
+}
 
 /*
  * Read one character from the UART [p.140]
@@ -73,37 +79,30 @@ int uart_rx(void)
 }
 
 
-/*
- * RX interrupt function : Read one byte from uart and put into the rx
- * ringbuffer. If the RB is full, the new data will be dropped.
- */
- 
-ISR(USART_RXC_vect)
+ISR(USART_RX_vect)
 {
 	uint8_t head;
 	
 	head = (rb_rx.head + 1) % sizeof(rb_rx.buf);
 	if(rb_rx.tail == head) return;
 	
-	rb_rx.buf[rb_rx.head] = UDR;		/* Get data from UART and put into rb */
-	rb_rx.head = head;			/* Update ringbuffer head pointer */
+	rb_rx.buf[rb_rx.head] = UDR0;
+	rb_rx.head = head;
 }
 
 
-/*
- * TX-register empty interrupt 
- */
- 
 ISR(USART_UDRE_vect)
 {
-	UDR = rb_tx.buf[rb_tx.tail];				/* Put char in TX reg */
-	rb_tx.tail = (rb_tx.tail + 1) % sizeof(rb_tx.buf);	/* Update ringbuffer */
+	UDR0 = rb.buf[rb.tail];
+	rb.tail = (rb.tail + 1) % RB_SIZE;
 	
-	if(rb_tx.tail == rb_tx.head) {				/* If rb empty, disable irq */
-		UCSRB &= ~(1<<UDRIE);
+	if(rb.tail == rb.head) {
+		UCSR0B &= ~(1<<UDRIE0);
 	}
 }
+
 
 /*
  * End
  */
+

@@ -44,14 +44,14 @@ int main(void)
 	adc_init();
 	pwm_init();
 
-	TCCR0 = (1<<CS01);
-	TIMSK |= (1<<TOIE0);
+	TCCR0B = (1<<CS01);
+	TIMSK0 |= (1<<TOIE0);
 
 	printd("Hello\n");
 
 	sei();
 
-	led_set_rgb(30, 30, 30);
+	led_set_rgb(0, 0, 0);
 
 	for(;;) {
 		uint8_t i, j;

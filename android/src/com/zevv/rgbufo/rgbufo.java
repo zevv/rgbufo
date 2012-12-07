@@ -321,6 +321,7 @@ public class rgbufo extends Activity implements SensorEventListener
 				break;
 			case MotionEvent.ACTION_UP:
 				send_color(x, y, 0);
+				send_color(x, y, 0);
 				break;
 		}
 

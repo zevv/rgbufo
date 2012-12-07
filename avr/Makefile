@@ -10,10 +10,10 @@ ELF	= $(NAME).elf
 FHEX	= $(NAME).hex
 EHEX	= $(NAME)-eeprom.hex
 
-CFLAGS  += -mmcu=atmega8 -Wall -Werror -Os -g -I.
+CFLAGS  += -mmcu=atmega88 -Wall -Werror -Os -g -I.
 CFLAGS	+= -DF_CPU=16000000 
-LDFLAGS += -mmcu=atmega8 -g
-ADFLAGS += -p m8 -c avrispv2 -P usb
+LDFLAGS += -mmcu=atmega88 -g
+ADFLAGS += -p m88 -c avrispv2 -P usb
 
 CC 	= avr-gcc
 LD 	= avr-gcc
