@@ -6,6 +6,7 @@
 #include <util/delay.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <avr/wdt.h>
 
 #include "uart.h"
 #include "printd.h"
@@ -27,18 +28,19 @@ void do_pwm_s(void);
 
 
 struct rgb rgb[3] = { 
-	{ .mask = (1<<PC2) },
-	{ .mask = (1<<PC1) },
-	{ .mask = (1<<PC0) }
+	{ .mask = (1<<PC3) },
+	{ .mask = (1<<PC4) },
+	{ .mask = (1<<PC5) }
 };
 
 
 int main(void)
 {
-	uart_init(UART_BAUD(1200));
+	DDRB |= (1<<PB0) | (1<<PB1);;
 
-	DDRC |= (1<<PC0) | (1<<PC1) | (1<<PC2);
-	DDRB |= (1<<PB0);
+	uart_init(UART_BAUD(1200));
+	
+	DDRC |= (1<<PC3) | (1<<PC4) | (1<<PC5);
 	DDRD |= (1<<PD7) | (1<<PD2);
 
 	adc_init();
@@ -56,6 +58,8 @@ int main(void)
 	for(;;) {
 		uint8_t i, j;
 
+		wdt_reset();
+		PORTB ^= (1<<PB1);
 		for(i=0; i<3; i++) {
 			volatile struct rgb *r = &rgb[i];
 			for(j=0; j<2; j++) {
@@ -181,7 +185,7 @@ ISR(TIMER0_OVF_vect)
 	__asm("nop");
 	TCNT0 = 0xb9; /* 26.4 khz */
 	
-	int16_t v = adc_sample(5);
+	int16_t v = adc_sample(1);
 
 	/* Remove DC */
 
