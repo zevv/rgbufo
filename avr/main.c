@@ -21,6 +21,7 @@ void handle_char(uint8_t c);
 
 int main(void)
 {
+	int i;
 	wdt_disable();
 
 	DDRB |= (1<<PB0) | (1<<PB1);
@@ -29,10 +30,9 @@ int main(void)
 	uart_init(UART_BAUD(1200));
 	adc_init();
 	rx_init();
-	pwm_init();
 	led_init();
+	//pwm_init();
 
-	int i;
 	for(i=0; i<256; i++) {
 		led_set_hsv(i, 255, 10);
 		led_pwm_p();
@@ -42,13 +42,11 @@ int main(void)
 	sei();
 
 	for(;;) {
-
 		led_pwm_p();
 
 		int c = uart_rx();
 
 		if(c != -1) {
-			//uart_tx(c);
 			handle_char(c);
 		}
 	}
@@ -70,8 +68,6 @@ void handle_char(uint8_t c)
 	static uint8_t buf[32];
 	static uint8_t p = 0;
 	static uint8_t escape = 0;
-
-	//uart_tx('a');
 
 	if(escape) {
 		if(p < sizeof(buf)-1) buf[p++] = c;

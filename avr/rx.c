@@ -22,6 +22,8 @@ void rx_init(void)
 
 #define HIST_LEN 12	/* number of samples in correlator history */
 #define FILT_LEN 22	/* number of samples in moving average filter */
+#define THRESHOLD 6	/* threshold for average output data */
+
 
 ISR(TIMER0_OVF_vect)
 {
@@ -62,13 +64,11 @@ ISR(TIMER0_OVF_vect)
 	filt_tot += rb_filt[p_filt] - rb_filt[p_filt_next];
 	p_filt = p_filt_next;
 
-	pwm_set(filt_tot * 8 + 128);
+	//pwm_set(filt_tot * 8 + 128);
 
 	/* Output data to port looped back to uart RX */
 
-#define DISC 6
-
-	if(filt_tot < DISC) {
+	if(filt_tot < THRESHOLD) {
 		PORTD |= (1<<PD2);
 	} else {
 		PORTD &= ~(1<<PD2);

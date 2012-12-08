@@ -27,6 +27,7 @@ import android.view.MotionEvent;
 import android.view.View.OnTouchListener;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.os.PowerManager.WakeLock
 
 public class rgbufo extends Activity implements SensorEventListener
 {
@@ -160,7 +161,7 @@ public class rgbufo extends Activity implements SensorEventListener
 				int i;
 
 				if(fifo.isEmpty()) {
-					for(i=0; i<8; i++) {
+					for(i=0; i<1; i++) {
 						write_bit(0);
 					}
 				} else {
@@ -238,7 +239,7 @@ public class rgbufo extends Activity implements SensorEventListener
 		if(g > 255) g = 255;
 		if(b > 255) b = 255;
 		
-		Log.i("rgbufo", String.format("pixel: #%02x%02x%02x", r, g, b));
+		//Log.i("rgbufo", String.format("pixel: #%02x%02x%02x", r, g, b));
 
 		int[] data = { 'c', r, g, b };
 		send(data);
@@ -265,13 +266,6 @@ public class rgbufo extends Activity implements SensorEventListener
 
 
 	@Override
-	public void onDestroy()
-	{
-		super.onDestroy();
-	}
-
-
-	@Override
 	public void onStart()
 	{
 		super.onStart();
@@ -290,12 +284,41 @@ public class rgbufo extends Activity implements SensorEventListener
 				AudioFormat.ENCODING_PCM_16BIT, 
 				buflen, 
 				AudioTrack.MODE_STREAM);
+	}
 
-		track.play();
 
+	@Override
+	public void onResume()
+	{
+		super.onResume();
 		audiotask = new AudioTask();
 		audiotask.execute();
-	
+		track.play();
+	}
+
+
+	@Override
+	public void onPause()
+	{
+		super.onPause();
+		track.stop(); 
+		audiotask.cancel(true);
+	}
+
+
+	@Override
+	public void onStop()
+	{
+		super.onStop();
+		track.release();
+		track = null;
+	}
+
+
+	@Override
+	public void onDestroy()
+	{
+		super.onDestroy();
 	}
 
 
@@ -328,7 +351,7 @@ public class rgbufo extends Activity implements SensorEventListener
 		return false;
 	}
 
-	
+
 
 	@Override
 	public void onSensorChanged(SensorEvent ev)
@@ -340,22 +363,11 @@ public class rgbufo extends Activity implements SensorEventListener
 
 	@Override
 	public void onAccuracyChanged(Sensor arg0, int arg1) {
-	
+
 	}
 
 
 
-	@Override
-	public void onStop()
-	{
-		super.onStop();
-
-		audiotask.cancel(true);
-
-		track.stop(); 
-		track.release();
-		track = null;
-	}
 }
 
 /*
