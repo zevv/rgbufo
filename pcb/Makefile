@@ -10,4 +10,4 @@ rgbufo.pcb: rgbufo.sch
 	gsch2pcb --use-files --elements-dir footprints rgbufo.sch
 
 clean:
-	rm -f *.gbr *.org *.cnc *~ *.bak* *.png *.cmd *.net
+	rm -f *.gbr *.org *.cnc *~ *.bak* *.png *.cmd *.net *.pcb-
