@@ -12,63 +12,38 @@
 #include "printd.h"
 #include "adc.h"
 #include "pwm.h"
-
-
-struct rgb {
-	uint8_t mask;
-	uint8_t set;
-	uint8_t val;
-};
+#include "rx.h"
+#include "led.h"
 
 
 void handle_char(uint8_t c);
-void led_set_rgb(uint8_t r, uint8_t g, uint8_t b);
-void do_pwm_p(void);
-void do_pwm_s(void);
-
-
-struct rgb rgb[3] = { 
-	{ .mask = (1<<PC3) },
-	{ .mask = (1<<PC4) },
-	{ .mask = (1<<PC5) }
-};
 
 
 int main(void)
 {
-	DDRB |= (1<<PB0) | (1<<PB1);;
+	wdt_disable();
 
-	uart_init(UART_BAUD(1200));
-	
-	DDRC |= (1<<PC3) | (1<<PC4) | (1<<PC5);
+	DDRB |= (1<<PB0) | (1<<PB1);
 	DDRD |= (1<<PD7) | (1<<PD2);
 
+	uart_init(UART_BAUD(1200));
 	adc_init();
+	rx_init();
 	pwm_init();
+	led_init();
 
-	TCCR0B = (1<<CS01);
-	TIMSK0 |= (1<<TOIE0);
-
-	printd("Hello\n");
+	int i;
+	for(i=0; i<256; i++) {
+		led_set_hsv(i, 255, 10);
+		led_pwm_p();
+	}
+	led_set_rgb(0, 0, 0);
 
 	sei();
 
-	led_set_rgb(0, 0, 0);
-
 	for(;;) {
-		uint8_t i, j;
 
-		wdt_reset();
-		PORTB ^= (1<<PB1);
-		for(i=0; i<3; i++) {
-			volatile struct rgb *r = &rgb[i];
-			for(j=0; j<2; j++) {
-				if(r->val < r->set) r->val ++;
-				if(r->val > r->set) r->val --;
-			}
-		}
-
-		do_pwm_p();
+		led_pwm_p();
 
 		int c = uart_rx();
 
@@ -126,105 +101,6 @@ void handle_char(uint8_t c)
 		}
 	}
 }
-
-
-void do_pwm_p(void)
-{
-	uint8_t i, c;
-		
-	for(c=0; c<3; c++) {
-		volatile struct rgb *r = &rgb[c];
-		if(r->val) PORTC |= r->mask;
-	}
-
-	for(i=0; i<255; i++) {
-		for(c=0; c<3; c++) {
-			volatile struct rgb *r = &rgb[c];
-			if(i == r->val) {
-				PORTC &= ~r->mask;
-			}
-		}
-	}
-}
-
-
-void do_pwm_s(void)
-{
-	uint8_t c, i;
-	volatile struct rgb *r = &rgb[0];
-
-	for(c=0; c<3; c++) {
-		if(r->val > 1) PORTC |= r->mask;
-		for(i=0; i<255; i++) if(i == r->val) PORTC &= ~r->mask;
-		PORTC &= ~r->mask;
-		r++;
-	}
-}
-
-
-void led_set_rgb(uint8_t r, uint8_t g, uint8_t b)
-{
-	rgb[0].set = r;
-	rgb[1].set = g;
-	rgb[2].set = b;
-}
-
-
-#define HIST_LEN 12	/* number of samples in correlator history */
-#define FILT_LEN 22	/* number of samples in moving average filter */
-
-ISR(TIMER0_OVF_vect)
-{
-	static int16_t bias = 512;
-	static uint8_t rb_filt[FILT_LEN] = { 0 };
-	static uint8_t p_filt = 0;
-	static uint8_t filt_tot = 0;
-	static uint8_t n = 0;
-	static uint16_t hist = 0;
-
-	__asm("nop");
-	TCNT0 = 0xb9; /* 26.4 khz */
-	
-	int16_t v = adc_sample(1);
-
-	/* Remove DC */
-
-	if(n++ == 0) {
-		if(v > bias) bias ++;
-		if(v < bias) bias --;
-	}
-
-	/* Convert sampled value to square wave */
-
-	uint8_t w = v > bias;
-
-	/* Save HIST_LEN samples of history */
-
-	hist = (hist>>1) | (w<<HIST_LEN);
-	uint8_t m = (w ^ hist) & 1;
-	
-	/* Correlator: multiply sample with delayed sample, uses xor as cheap
-	 * multiply */
-	
-	uint8_t p_filt_next = p_filt + 1;
-	if (p_filt_next >= HIST_LEN) p_filt_next = 0;
-	rb_filt[p_filt] = m;
-	filt_tot += rb_filt[p_filt] - rb_filt[p_filt_next];
-	p_filt = p_filt_next;
-
-	pwm_set(filt_tot * 8 + 128);
-
-	/* Output data to port looped back to uart RX */
-
-#define DISC 6
-
-	if(filt_tot < DISC) {
-		PORTD |= (1<<PD2);
-	} else {
-		PORTD &= ~(1<<PD2);
-	}
-}
-
 
 /*
  * End

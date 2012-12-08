@@ -1,7 +1,7 @@
 
 NAME	= ufo
 
-SRC	= main.c uart.c printd.c adc.c pwm.c
+SRC	= main.c uart.c printd.c adc.c pwm.c rx.c led.c
 
 #############################################################################
 
