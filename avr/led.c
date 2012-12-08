@@ -26,6 +26,9 @@ struct rgb rgb[3] = {
 	{ .mask = (1<<PC5) }
 };
 
+uint8_t flash_on = 0;
+uint8_t flash_off = 0;
+
 
 void led_init(void)
 {
@@ -36,14 +39,19 @@ void led_init(void)
 void led_pwm_p(void)
 {
 	uint8_t i, c, j;
-
+	static uint16_t n = 0;
+		
 	for(c=0; c<3; c++) {
 		volatile struct rgb *r = &rgb[c];
 		for(j=0; j<2; j++) {
 			if(r->val < r->set) r->val ++;
 			if(r->val > r->set) r->val --;
 		}
-		if(r->val) PORTC |= r->mask;
+	}
+
+	for(c=0; c<3; c++) {
+		volatile struct rgb *r = &rgb[c];
+		if(r->val && (flash_on == 0 || n < flash_on)) PORTC |= r->mask;
 	}
 
 	for(i=0; i<255; i++) {
@@ -54,6 +62,9 @@ void led_pwm_p(void)
 			}
 		}
 	}
+
+	if(n > flash_on * 4) n =0;
+	n++;
 }
 
 
@@ -68,6 +79,13 @@ void led_pwm_s(void)
 		PORTC &= ~r->mask;
 		r++;
 	}
+}
+
+
+void led_set_flash(uint8_t on, uint8_t off)
+{
+	flash_on = on;
+	flash_off = off;
 }
 
 

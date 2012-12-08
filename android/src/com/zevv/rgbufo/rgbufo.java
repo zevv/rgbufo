@@ -27,7 +27,6 @@ import android.view.MotionEvent;
 import android.view.View.OnTouchListener;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.os.PowerManager.WakeLock
 
 public class rgbufo extends Activity implements SensorEventListener
 {
@@ -47,19 +46,22 @@ public class rgbufo extends Activity implements SensorEventListener
 		int x, y;
 
 		int d = 4;
+		
+		int S = ch;
+		if(cw < S) S = cw;
 
-		for(y=0; y<ch; y+=d) {
-			for(x=0; x<cw; x+=d) {
+		for(y=0; y<S; y+=d) {
+			for(x=0; x<S; x+=d) {
 
-				double h = (double)y / (double)ch;
-				double s = (double)x / (double)cw;
+				double h = (double)y / (double)S;
+				double s = (double)x / (double)S;
 				double v = 1.0;
 
-				int xx = cw/2 - x;
-				int yy = ch/2 - y;
+				int xx = S/2 - x;
+				int yy = S/2 - y;
 
 				h = (Math.atan2(xx, yy) + 3.1415) / 6.2830;
-				s = 1.2 * Math.hypot(xx, yy) / (cw/2) - 0.2;
+				s = 1.2 * Math.hypot(xx, yy) / (S/2) - 0.2;
 
 				if(h < 0) h = 0;
 				if(h > 1) h = 1;
@@ -90,9 +92,11 @@ public class rgbufo extends Activity implements SensorEventListener
 
 				paint.setARGB(255, (int)(r*255), (int)(g*255), (int)(b*255));
 				canvas.drawRect(x, y, x+d, y+d, paint);	
-				canvas.drawPoint(x, y, paint);
 			}
 		}
+
+		paint.setARGB(255, 128, 128, 128);
+		canvas.drawRect(cw * 20 / 100, cw, cw, ch, paint);	
 	}
 
 
@@ -220,6 +224,8 @@ public class rgbufo extends Activity implements SensorEventListener
 
 		if(x < 0) x = 0; if(x > cw) x = cw-1;
 		if(y < 0) y = 0; if(y > ch) y = ch-1;
+		if(x > cw-1) x = cw-1;
+		if(y > ch-1) y = ch-1;
 
 		int c = bitmap.getPixel(x, y);
 
@@ -331,21 +337,46 @@ public class rgbufo extends Activity implements SensorEventListener
 		int y = (int)ev.getY();
 		int a = ev.getAction();
 
-		switch(a) {
-			case MotionEvent.ACTION_MOVE:
-				double p = ev.getPressure();
-				if(p > pmax) pmax = p;
-				pmax *= 0.99;
-				p = p / pmax;
-				if(p < 0) p = 0;
-				if(p > 1) p = 1;
-				pavg = pavg * 0.6 + p * 0.4;
-				send_color(x, y, pavg);
-				break;
-			case MotionEvent.ACTION_UP:
-				send_color(x, y, 0);
-				send_color(x, y, 0);
-				break;
+		if(y > cw) {
+
+			switch(a) {
+
+				case MotionEvent.ACTION_DOWN:
+					x = x * 100 / cw;
+					int flash_on;
+					if(x < 20) {
+						flash_on = 0;
+					} else {
+						flash_on = 100 * (x-20) / 80;
+					}
+
+					Log.i("rgbufo", String.format("flash: %d %d", flash_on, 0));
+					int[] data = { 'f', flash_on, 0 };
+					send(data);
+					break;
+			}
+				
+		} else {
+
+			switch(a) {
+
+				case MotionEvent.ACTION_DOWN:
+				case MotionEvent.ACTION_MOVE:
+					double p = ev.getPressure();
+					if(p > pmax) pmax = p;
+					pmax *= 0.99;
+					p = p / pmax;
+					if(p < 0) p = 0;
+					if(p > 1) p = 1;
+					pavg = pavg * 0.6 + p * 0.4;
+					send_color(x, y, pavg);
+					break;
+
+				case MotionEvent.ACTION_UP:
+					send_color(x, y, 0);
+					send_color(x, y, 0);
+					break;
+			}
 		}
 
 		return false;

@@ -59,6 +59,11 @@ void handle_pkt(uint8_t *buf, uint8_t len)
 {
 	if(buf[0] == 'c') {
 		led_set_rgb(buf[1], buf[2], buf[3]);
+
+	}
+	
+	if(buf[0] == 'f') {
+		led_set_flash(buf[1], buf[2]);
 	}
 }
 
