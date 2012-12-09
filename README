@@ -1,0 +1,6 @@
+
+Build requirements:
+
+- avr gcc + avr libc
+- android sdk, version 17 or higher
+
